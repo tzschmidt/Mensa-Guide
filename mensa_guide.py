@@ -10,28 +10,28 @@ def main():
     # setup
     # TODO variable data path
     todayMeals = get_today_meals()
-    user = input("Enter user-id: ")
+    user = input("User-id eingeben: ")
     dataDir = "data"
     dataPath = "data/" + user + ".json"
     allergensPath = "data/allergens.json"
     if not os.path.isdir(dataDir):
         os.makedirs(dataDir)
-        print("data folder created")
+        print("D: data folder created")
     if not os.path.isfile(allergensPath):
         open(allergensPath, 'a').close()
-        print("allergens file created")
+        print("D: allergens file created")
         allergens = get_allergens(todayMeals)
-        save_data(allergens, "allergens")
     else:
-        print("allergens file found")
+        print("D: allergens file found")
         allergens = load_data("allergens")
         allergens = update_allergens(allergens, todayMeals)
+    save_data(allergens, "allergens")
     if not os.path.isfile(dataPath):
         open(dataPath, 'a').close()
-        print("data file created")
+        print("D: data file created")
         profile = init_taste(user, allergens)
     else:
-        print("data file found")
+        print("D: data file found")
         profile = load_data(user)
         profile = update_allergy(profile, allergens)
         
@@ -40,26 +40,29 @@ def main():
     
     # update taste
     selMeal  = select_meal(todayMeals)
+    if selMeal == None:
+        print("D: done")
+        return None
     profile = rate_meal(profile, selMeal)
     save_data(profile, profile["id"])
     
-    print("Done")
+    print("D: done")
     
     return None
 
 #%%
 # initalize profile of new user
-def init_taste(user, ingredients):
+def init_taste(user, allergens):
     profile = {"id": user, "diet":{}, "allergens":{}, "taste":{}}
-    print("Diet:")
+    print("Präferenzen [ja, j, yes, y, Rest->nein]:")
     for i in ["Vegetarisch", "Vegan"]:
-        if input(i + "? ").lower() in ["yes", "y"]:
+        if input(i + "? ").lower() in ["ja", "j", "yes", "y"]:
             profile["diet"][i] = True
         else:
             profile["diet"][i] = False
-    print("Allergien:")
-    for i in ingredients:
-        if input(i + "? ").lower() in ["yes", "y"]:
+    print("Allergene [ja, j, yes, y, Rest->nein]:")
+    for i in allergens:
+        if input(i + "? ").lower() in ["ja", "j", "yes", "y"]:
             profile["allergens"][i] = True
         else:
             profile["allergens"][i] = False
@@ -69,14 +72,20 @@ def init_taste(user, ingredients):
 #%%
 # update allergen preferences of user
 def update_allergy(profile, allergens):
-    print("New allergens?")
+    new = False
+    print("D: searching for new allergens")
     for i in allergens:
         if i not in profile["allergens"]:
-            if input(i + "? ").lower() in ["yes", "y"]:
-                profile["allergens"][i] = True
-            else:
-                profile["allergens"][i] = False
-    print("Done")
+            new = True
+    if new:
+        print("Allergene [ja, j, yes, y, Rest->nein]:")
+        for i in allergens:
+            if i not in profile["allergens"]:
+                if input(i + "? ").lower() in ["ja", "j", "yes", "y"]:
+                    profile["allergens"][i] = True
+                else:
+                    profile["allergens"][i] = False
+    print("D: done")
     save_data(profile, profile["id"])
     return profile
     
@@ -86,7 +95,7 @@ def update_allergens(allergens, meals):
     for i in new:
         if i not in allergens:
             allergens.append(i)
-    print("allergens updated")
+    print("D: allergens updated")
     return allergens
 
 # get allergens from list of meals
@@ -95,7 +104,9 @@ def get_allergens(meals):
     for i in meals:
         for j in i["allergens"]:
             if j["type"] == "Allergen":
-                allergens.append(j["longName"])
+                allergen = j["longName"]
+                if allergen not in allergens:
+                    allergens.append(allergen)
     return allergens
 
 #%%
@@ -105,7 +116,7 @@ def load_data(user):
     with open(path) as infile:
         data = json.load(infile)
         infile.close()
-    print("read")
+    print("D: read")
     return data
 
 # save data to json
@@ -115,7 +126,7 @@ def save_data(data, user):
     with open(path, 'w') as outfile:
         outfile.write(json_data)
         outfile.close()
-    print("written")
+    print("D: written")
 
 #%%
 # use api to get meals
@@ -152,7 +163,7 @@ def get_today_meals():
 # no gramatical cases -> Pilzen != Pilze
 def parse_desc(meal):
     parts = []
-    words = re.split(",|mit|und|ohne|auf|bei|in|über|unter|zu",meal["description"])
+    words = list(filter(("").__ne__, re.split(",| mit | und | ohne | auf | bei | in | über | unter | zu | dazu ",meal["description"])))
     for i in words:
         i = i.strip()
         if i not in parts:
@@ -161,16 +172,18 @@ def parse_desc(meal):
 
 # select meal from list of meals
 def select_meal(meals):
-    orders = []
-    print("Todays meals:")
+    orders = ["0"]
+    print("Heutige Gerichte:")
+    print("0: Nichts essen")
     for i in meals:
         print(str(i["order"]) + ": " + i["description"])
         orders.append(str(i["order"]))
     s = None
     while s not in orders:
         print(orders)
-        s = input("Select meal from above: ")
-    print(str(s) + " selected")
+        s = input("Gericht von oben auswählen: ")
+    if s == "0":
+        return None
     for i in meals:
         if str(i["order"]) == s: return i
         
@@ -178,15 +191,15 @@ def select_meal(meals):
 # rate meal and update taste profile
 def rate_meal(profile, meal):
     parts = parse_desc(meal)
-    print("Rate meal parts from -10 (very bad) to 10 (very good):")
+    print("Gericht bewerten von -5 (sehr schlecht) bis 5 (sehr gut):")
+    rating = -6
+    while not (-5 <= rating <= 5):
+        rating = input(meal["description"] + ": ").strip()
+        if rating.lstrip('-').isdigit():
+            rating = int(rating)
+        else:
+            rating = -11
     for i in parts:
-        rating = -11
-        while not (-10 <= rating <= 10):
-            rating = input(i + ": ").strip()
-            if rating.lstrip('-').isdigit():
-                rating = int(rating)
-            else:
-                rating = -11
         if i in profile["taste"]:
             profile["taste"][i] = round(0.7 * rating + 0.3 * profile["taste"][i])
         else:
@@ -200,7 +213,8 @@ def reset_taste(profile):
     for i in profile["taste"]:
         profile["taste"][i] = 0
     return profile
-    
+
+# TODO function to reset/update user profile
 #%%
 main()
 
