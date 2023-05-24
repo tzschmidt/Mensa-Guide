@@ -7,11 +7,12 @@ import re
 #%%
 # main program
 def main():
+    # setup
     # TODO variable data path
     todayMeals = get_today_meals()
-    student = input("Enter student-id: ")
+    user = input("Enter user-id: ")
     dataDir = "data"
-    dataPath = "data/" + student + ".json"
+    dataPath = "data/" + user + ".json"
     allergensPath = "data/allergens.json"
     if not os.path.isdir(dataDir):
         os.makedirs(dataDir)
@@ -28,17 +29,28 @@ def main():
     if not os.path.isfile(dataPath):
         open(dataPath, 'a').close()
         print("data file created")
-        profile = init_taste(student, allergens)
+        profile = init_taste(user, allergens)
     else:
         print("data file found")
-        profile = load_data(student)
+        profile = load_data(user)
         profile = update_allergy(profile, allergens)
+        
+    # recommend meal
+    #
+    
+    # update taste
+    selMeal  = select_meal(todayMeals)
+    profile = rate_meal(profile, selMeal)
+    save_data(profile, profile["id"])
+    
+    print("Done")
+    
     return None
 
 #%%
 # initalize profile of new user
-def init_taste(student, ingredients):
-    profile = {"id": student, "diet":{}, "allergens":{}, "taste":{}}
+def init_taste(user, ingredients):
+    profile = {"id": user, "diet":{}, "allergens":{}, "taste":{}}
     print("Diet:")
     for i in ["Vegetarisch", "Vegan"]:
         if input(i + "? ").lower() in ["yes", "y"]:
@@ -51,7 +63,7 @@ def init_taste(student, ingredients):
             profile["allergens"][i] = True
         else:
             profile["allergens"][i] = False
-    save_data(profile, student)
+    save_data(profile, user)
     return profile
 
 #%%
@@ -88,8 +100,8 @@ def get_allergens(meals):
 
 #%%
 # load data from json
-def load_data(student):
-    path = "data/" + student + ".json"
+def load_data(user):
+    path = "data/" + user + ".json"
     with open(path) as infile:
         data = json.load(infile)
         infile.close()
@@ -97,8 +109,8 @@ def load_data(student):
     return data
 
 # save data to json
-def save_data(data, student):
-    path = "data/" + student + ".json"
+def save_data(data, user):
+    path = "data/" + user + ".json"
     json_data = json.dumps(data, indent=4)
     with open(path, 'w') as outfile:
         outfile.write(json_data)
@@ -120,8 +132,8 @@ def get_all_meals():
     response = requests.get('https://apiup.uni-potsdam.de/endpoints/mensaAPI/2.0/meals', params=params, headers=headers)
     return response.json()["meal"]
 
-# filter not needed meals
-# (not today, Nudeltheke, Abendangebot)
+# filter unneeded meals
+# (other days, Nudeltheke, Abendangebot)
 def get_today_meals():
     meals = get_all_meals()
     day = datetime.datetime.now().strftime("%Y-%m-%d")
@@ -133,21 +145,19 @@ def get_today_meals():
     return tmeals
 
 #%%
-# TODO integrate into main
-
-# parse name of meal into parts
+# parse description of meal into parts
 # WIP only simplified for now
 # no difference between "mit" and "ohne"
-# theorretically "ohne" should appear very rarely
+# theoretically "ohne" should appear very rarely
 # no gramatical cases -> Pilzen != Pilze
-def parse_name(meal):
+def parse_desc(meal):
     parts = []
     words = re.split(",|mit|und|ohne|auf|bei|in|über|unter|zu",meal["description"])
     for i in words:
         i = i.strip()
         if i not in parts:
             parts.append(i)
-    print(parts)
+    return parts
 
 # select meal from list of meals
 def select_meal(meals):
@@ -163,11 +173,33 @@ def select_meal(meals):
     print(str(s) + " selected")
     for i in meals:
         if str(i["order"]) == s: return i
+        
+#%%
+# rate meal and update taste profile
+def rate_meal(profile, meal):
+    parts = parse_desc(meal)
+    print("Rate meal parts from -10 (very bad) to 10 (very good):")
+    for i in parts:
+        rating = -11
+        while not (-10 <= rating <= 10):
+            rating = input(i + ": ").strip()
+            if rating.lstrip('-').isdigit():
+                rating = int(rating)
+            else:
+                rating = -11
+        if i in profile["taste"]:
+            profile["taste"][i] = round(0.7 * rating + 0.3 * profile["taste"][i])
+        else:
+            profile["taste"][i] = rating
+    return profile
 
 #%%
-# TODO:
-# rate selected meal
-# update taste profile
+# reset taste profile
+# not used
+def reset_taste(profile):
+    for i in profile["taste"]:
+        profile["taste"][i] = 0
+    return profile
     
 #%%
 main()
