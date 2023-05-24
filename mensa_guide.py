@@ -9,6 +9,7 @@ import re
 def main():
     # setup
     # TODO variable data path
+    # TODO check user-id format 
     todayMeals = get_today_meals()
     user = input("User-id eingeben: ")
     dataDir = "data"
@@ -54,15 +55,15 @@ def main():
 # initalize profile of new user
 def init_taste(user, allergens):
     profile = {"id": user, "diet":{}, "allergens":{}, "taste":{}}
-    print("Präferenzen [ja, j, yes, y, Rest->nein]:")
+    print("Präferenzen [ja, j, Rest->nein]:")
     for i in ["Vegetarisch", "Vegan"]:
-        if input(i + "? ").lower() in ["ja", "j", "yes", "y"]:
+        if input(i + "? ").lower() in ["ja", "j"]:
             profile["diet"][i] = True
         else:
             profile["diet"][i] = False
-    print("Allergene [ja, j, yes, y, Rest->nein]:")
+    print("Allergene [ja, j, Rest->nein]:")
     for i in allergens:
-        if input(i + "? ").lower() in ["ja", "j", "yes", "y"]:
+        if input(i + "? ").lower() in ["ja", "j"]:
             profile["allergens"][i] = True
         else:
             profile["allergens"][i] = False
@@ -78,10 +79,10 @@ def update_allergy(profile, allergens):
         if i not in profile["allergens"]:
             new = True
     if new:
-        print("Allergene [ja, j, yes, y, Rest->nein]:")
+        print("Allergene [ja, j, Rest->nein]:")
         for i in allergens:
             if i not in profile["allergens"]:
-                if input(i + "? ").lower() in ["ja", "j", "yes", "y"]:
+                if input(i + "? ").lower() in ["ja", "j"]:
                     profile["allergens"][i] = True
                 else:
                     profile["allergens"][i] = False
@@ -163,7 +164,7 @@ def get_today_meals():
 # no gramatical cases -> Pilzen != Pilze
 def parse_desc(meal):
     parts = []
-    words = list(filter(("").__ne__, re.split(",| mit | und | ohne | auf | bei | in | über | unter | zu | dazu ",meal["description"])))
+    words = list(filter(("").__ne__, re.split(",| mit | und | ohne | auf | bei | in | über | unter | zu | dazu ", " " + meal["description"] + " ")))
     for i in words:
         i = i.strip()
         if i not in parts:
