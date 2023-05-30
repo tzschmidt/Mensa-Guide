@@ -36,14 +36,13 @@ def main():
         profile = load_data(user)
         profile = update_allergy(profile, allergens)
         
-    # recommend meal
-    #
-    
-    # update taste
-    selMeal  = select_meal(todayMeals)
+    # recommend meal and select meal
+    selMeal  = select_meal(profile, todayMeals)
     if selMeal == None:
         print("D: done")
         return None
+    
+    # update taste profile
     profile = rate_meal(profile, selMeal)
     save_data(profile, profile["id"])
     
@@ -70,7 +69,7 @@ def init_taste(user, allergens):
     save_data(profile, user)
     return profile
 
-#%%
+
 # update allergen preferences of user
 def update_allergy(profile, allergens):
     new = False
@@ -162,33 +161,64 @@ def get_today_meals():
 # no difference between "mit" and "ohne"
 # theoretically "ohne" should appear very rarely
 # no gramatical cases -> Pilzen != Pilze
+# TODO: junge, frische
 def parse_desc(meal):
     parts = []
-    words = list(filter(("").__ne__, re.split(",| mit | und | ohne | auf | bei | in | über | unter | zu | dazu ", " " + meal["description"] + " ")))
+    words = list(filter(("").__ne__, re.split(",| mit | und | ohne | auf | bei | in | über | unter | zu | dazu | an ", " " + meal["description"] + " ")))
     for i in words:
         i = i.strip()
         if i not in parts:
             parts.append(i)
     return parts
 
-# select meal from list of meals
-def select_meal(meals):
-    orders = ["0"]
+# select meal from rated list of fitting meals
+def select_meal(profile, meals):
+    f_meals = filter_meals(profile, meals)
+    orders = []
     print("Heutige Gerichte:")
-    print("0: Nichts essen")
-    for i in meals:
-        print(str(i["order"]) + ": " + i["description"])
-        orders.append(str(i["order"]))
+    print("Bewertung:\t | Nummer:\t | Gericht:")
+    rated = get_rated_meals(profile, f_meals)
+    for i in rated:
+        r = round(i[0],1)
+        if r < 0:
+            print(str(round(i[0],1)) + "\t\t | " + str(i[1]) + "\t\t | " + i[2] + " " + str(tuple(i[3])))
+        else:
+            print(str(round(i[0],1)) + "\t\t\t | " + str(i[1]) + "\t\t | " + i[2] + " " + str(tuple(i[3])))
+        orders.append(str(i[1]))
+    orders.append("0")
+    print("---\t\t\t | 0\t\t | Nichts essen")
     s = None
     while s not in orders:
         print(orders)
         s = input("Gericht von oben auswählen: ")
     if s == "0":
         return None
-    for i in meals:
+    for i in f_meals:
         if str(i["order"]) == s: return i
-        
-#%%
+    else: return None
+
+# filter meals by diet and allergens
+def filter_meals(profile, meals):
+    filtered_meals = []
+    p_allergens = []
+    for i in profile["allergens"]:
+        if profile["allergens"][i]:
+            p_allergens.append(i)
+    diet = set()
+    for i in profile["diet"]:
+        if profile["diet"][i]:
+            diet = diet | {i}
+    # vegetarians can also eat vegan meals
+    if "Vegetarisch" in diet:
+        diet = diet | {"Vegan"}
+    for i in meals:
+        if (diet & set(i["type"])) or not diet:
+            m_allergens = get_allergens([i])
+            if not set(p_allergens) & set(m_allergens):
+                filtered_meals.append(i)
+    return filtered_meals
+                
+
 # rate meal and update taste profile
 def rate_meal(profile, meal):
     parts = parse_desc(meal)
@@ -207,6 +237,23 @@ def rate_meal(profile, meal):
             profile["taste"][i] = rating
     return profile
 
+# get rating for meal based on profile
+def calc_rating(profile, meal):
+    parts = parse_desc(meal)
+    rating = 0
+    for i in parts:
+        if i in profile["taste"]:
+            rating += profile["taste"][i]
+    return (rating / len(parts))
+
+# rate meals
+def get_rated_meals(profile, meals):
+    rated = []
+    for i in meals:
+        rated.append((calc_rating(profile, i), i["order"], i["description"], i["type"]))
+    return reversed(sorted(rated))
+
+
 #%%
 # reset taste profile
 # not used
@@ -215,6 +262,11 @@ def reset_taste(profile):
         profile["taste"][i] = 0
     return profile
 
+# update diet and allergens profile
+# WIP, not used
+def update_profile(profile):
+    return init_taste(profile["id"], list(profile["allergens"].keys()))
+    
 # TODO function to reset/update user profile
 #%%
 main()
