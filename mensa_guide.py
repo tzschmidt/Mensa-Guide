@@ -3,6 +3,7 @@ import json
 import requests
 import datetime
 import re
+import PySimpleGUI as sg
 
 #%%
 # main program
@@ -266,11 +267,186 @@ def reset_taste(profile):
 # WIP, not used
 def update_profile(profile):
     return init_taste(profile["id"], list(profile["allergens"].keys()))
-    
+
+def create_blank_profile(user):
+    profile = {"id": user, "diet":{}, "allergens":{}, "taste":{}}
+    save_data(profile, user)
+    return profile
 # TODO function to reset/update user profile
 #%%
-main()
 
+# TODO gray out filtered options instead of removing
+def make_meal_layout(profile, todayMeals):
+    meallist_layout = [
+        [sg.Text('Gericht wählen:')],
+        [sg.Text('Heutige Gerichte:')],
+        ]
+    f_meals = filter_meals(profile, todayMeals)
+    rated = get_rated_meals(profile, f_meals)
+    orders = []
+    for i in rated:
+        meallist_layout.append([sg.Text(str(round(i[0],1)) + " | "  + i[2]), 
+                                sg.Radio('', 1, default=False, key=str(i[1]))])
+        orders.append(str(i[1]))
+    meallist_layout.append([sg.Text("0.0 | Nichts essen"), 
+                            sg.Radio('', 1, default=True, key='0')])
+    meallist_layout.append([sg.Button('Weiter')])
+    return meallist_layout, orders, f_meals
+
+def make_gui(theme=None):
+    
+    todayMeals = get_today_meals()
+    
+    # TODO manage users
+    user = sg.popup_get_text('Bitte User-ID eingeben')
+    if not user:
+        sg.popup_cancel('Ungültige ID. Programm beendet')
+        raise SystemExit()
+    
+    dataDir = "data"
+    dataPath = "data/" + user + ".json"
+    allergensPath = "data/allergens.json"
+    if not os.path.isdir(dataDir):
+        os.makedirs(dataDir)
+        print("D: data folder created")
+    if not os.path.isfile(allergensPath):
+        open(allergensPath, 'a').close()
+        print("D: allergens file created")
+        allergens = get_allergens(todayMeals)
+    else:
+        print("D: allergens file found")
+        allergens = load_data("allergens")
+        allergens = update_allergens(allergens, todayMeals)
+    save_data(allergens, "allergens")
+    
+    
+    if not os.path.isfile(dataPath):
+        open(dataPath, 'a').close()
+        print("D: data file created")
+        window = 0
+    else:
+        print("D: data file found")
+        profile = load_data(user)
+        window = 1
+    
+
+    if window == 0:
+        profile = create_blank_profile(user)
+        save_data(profile, user)
+        
+        np_layout = [
+            [sg.Text('Neues Geschmacksprofil:')],
+            [sg.Text('Vegetarisch'), sg.Radio('ja', 1, default=False, key='-VEGE-'), sg.Radio('nein', 1, default=True)],
+            [sg.Text('Vegan'), sg.Radio('ja', 2, default=False, key='-VEGA-'), sg.Radio('nein', 2, default=True)],
+            [sg.Button('Weiter')]
+            ]
+        np_win = sg.Window('Neues Geschmacksprofil', np_layout, element_justification='c')
+     
+    new_allergens = []
+    for i in allergens:
+        if i not in profile['allergens']:
+            new_allergens.append(i)
+    new_all_num = len(new_allergens)
+    all_count = 0
+    
+    if not new_all_num:
+        window = 2
+        meallist_layout, orders, f_meals = make_meal_layout(profile, todayMeals)
+        meallist_win = sg.Window('Gerichtauswahl', meallist_layout, element_justification='c')
+    else:
+        all_layout = [
+            [sg.ProgressBar(new_all_num, orientation='h', size=(20,10), key='-ALLER_PROGRESS-')],
+            [sg.Text('Allergene: ')],
+            [sg.Text(new_allergens[0], key='-ALLER-')],
+            [sg.Text('allergisch'), sg.Radio('ja', 1, default=False, key='-ALLER_YES-'), sg.Radio('nein', 1, default=True, key='-ALLER_NO-')],
+            [sg.Button('Weiter')]
+            ]
+                   
+    if window == 1:
+        all_win = sg.Window('Allergene', all_layout, element_justification='c')
+        
+    # windows:
+    # 0: np
+    # 1: all
+    # 2: recommendation
+    # 3: rating
+    while True:
+        if window == 0:
+            event, values = np_win.read()
+            if event == sg.WINDOW_CLOSED or event == 'Exit':
+                break
+            
+            if event == 'Weiter':
+                profile["diet"]['Vegetarisch'] = values['-VEGE-']
+                profile["diet"]['Vegan'] = values['-VEGA-']
+                window = 1
+                np_win.close()
+                all_win = sg.Window('Allergene', all_layout, element_justification='c')
+                
+        if window == 1:
+            event, values = all_win.read()
+            if event == sg.WINDOW_CLOSED or event == 'Exit':
+                break
+            if event == 'Weiter':
+                profile["allergens"][new_allergens[all_count]] = values['-ALLER_YES-']
+                if all_count < new_all_num-1:
+                    all_count += 1
+                    all_win['-ALLER-'].update(new_allergens[all_count])
+                    all_win['-ALLER_YES-'].update(False)
+                    all_win['-ALLER_NO-'].update(True)
+                    all_win['-ALLER_PROGRESS-'].update_bar(all_count)
+                else:
+                    save_data(profile, user)
+                    
+                    meallist_layout, orders, f_meals = make_meal_layout(profile, todayMeals)
+                    
+                    window = 2
+                    all_win.close()
+                    meallist_win = sg.Window('Gerichtauswahl', meallist_layout, element_justification='c')
+        
+        if window == 2:
+            event, values = meallist_win.read()
+            if event == sg.WINDOW_CLOSED or event == 'Exit':
+                break
+            if event == 'Weiter':
+                if values['0']:
+                    meallist_win.close()
+                    break
+                else:
+                    for i in orders:
+                        if values[i]:
+                            for j in f_meals:
+                                if str(j["order"]) == i:
+                                    s_meal = j
+                    parts = parse_desc(s_meal)
+                    window = 3
+                    meallist_win.close()
+                    rate_layout = [
+                        [sg.Text('Gericht bewerten')],
+                        [sg.Text(s_meal['description'])],
+                        [sg.Slider((-5,5), orientation='h', s=(25,20), key='-RATING-')],
+                        [sg.Button('Fertig')]
+                        ]
+                    rate_win = sg.Window('Bewertung', rate_layout, element_justification='c')
+                    
+        if window == 3:
+           event, values = rate_win.read()
+           if event == sg.WINDOW_CLOSED or event == 'Exit':
+               break
+           if event == 'Fertig':
+               for i in parts:
+                   if i in profile["taste"]:
+                       profile["taste"][i] = round(0.7 * values['-RATING-'] + 0.3 * profile["taste"][i])
+                   else:
+                       profile["taste"][i] = values['-RATING-']
+               save_data(profile, user)
+               rate_win.close()
+               break
+          
+#%% 
+#main()
+
+make_gui()
 #%%
 
 
